@@ -1,2 +1,63 @@
-# Task-and-Track
-A simple website which is designed to manage task and track.
+# Task & Track
+
+一个简约美观的任务与日程管理网页应用，包含四大功能模块：
+
+- **每周任务**：自定义任务并分配到一周中的某一天，按周一至周日纵向排列；完成后自动隐藏；无任务的周日期列表自动隐藏，全部无任务时显示空状态。
+- **每日任务**：每天重复的待办事项，第二天自动重新填充，完成后隐藏，全部完成显示空状态。
+- **日历视图**：完整月历，双击日期放大居中编辑当天事项（支持为每件事定义图标），单击日期展开 / 收回事项预览（移动端自动禁用展开）。
+- **查看任务列表**：在每周任务 / 每日任务界面通过小按钮打开，任务分为「已完成 / 未完成」展示。
+
+## 运行方式
+
+无需安装任何依赖、无需构建，直接用浏览器打开 `index.html` 即可。
+
+```
+双击 index.html（或用浏览器打开该文件）
+```
+
+## 技术说明
+
+- 纯 HTML / CSS / JavaScript，无第三方依赖。
+- 数据通过 `localStorage` 保存在本地浏览器中。
+- 日期弹层采用 FLIP 动画实现「从日期格子放大移动至屏幕中央」，背景带轻微模糊效果。
+- 移动端（≤768px）侧边栏自动变为底部栏，日历紧凑显示并去掉单击展开逻辑。
+
+## 文件结构
+
+```
+task-and-track/
+├── index.html              页面结构
+├── styles.css              样式与动画（含移动端适配）
+├── app.js                  交互逻辑
+├── favicon.svg             图标（矢量源文件）
+├── favicon.png             32×32 浏览器图标
+├── apple-touch-icon.png    180×180 iOS 主屏图标
+└── README.md               说明
+```
+
+## 部署到 GitHub Pages（免费、手机可访问）
+
+这是一个纯静态站点，可直接部署。以下任选其一：
+
+### 方式一：手动上传
+
+1. 在 GitHub 新建一个仓库（例如 `task-track`）。
+2. 把本文件夹内 `index.html`、`styles.css`、`app.js`、`favicon.*`、`apple-touch-icon.png` 上传到仓库根目录。
+3. 仓库 `Settings → Pages`，`Source` 选择 `Deploy from a branch`，分支选 `main`、目录 `/ (root)`，保存。
+4. 等待几分钟后访问 `https://<用户名>.github.io/task-track/` 即可。
+
+### 方式二：命令行推送
+
+```bash
+cd task-and-track
+git init
+git add .
+git commit -m "init task and track"
+git branch -M main
+git remote add origin https://github.com/<用户名>/task-track.git
+git push -u origin main
+```
+
+然后在 GitHub 仓库 `Settings → Pages` 中按方式一第 3、4 步开启 Pages。
+
+> 说明：本仓库当前未包含部署所需的 GitHub 账号 / 仓库信息，因此未直接部署；准备好账号后按上述步骤即可发布。

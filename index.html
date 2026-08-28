@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Task &amp; Track</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <!-- 侧边栏 -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-logo">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-name">Task &amp; Track</span>
+          <span class="brand-sub">任务与日程</span>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <button class="nav-item active" data-view="weekly">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="3" width="6" height="4" rx="1" />
+            <path d="M9 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-2" />
+            <path d="m9 13 2 2 4-4" />
+          </svg>
+          <span>每周任务</span>
+        </button>
+        <button class="nav-item" data-view="daily">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+          </svg>
+          <span>每日任务</span>
+        </button>
+        <button class="nav-item" data-view="calendar">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="17" rx="2" />
+            <line x1="16" y1="2" x2="16" y2="6" />
+            <line x1="8" y1="2" x2="8" y2="6" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+          </svg>
+          <span>日历视图</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+        </svg>
+        <span>数据自动保存在本地浏览器</span>
+      </div>
+    </aside>
+
+    <!-- 主内容区 -->
+    <main class="main">
+      <!-- 每周任务视图 -->
+      <section class="view active" id="view-weekly">
+        <div class="weekly-panel">
+          <header class="page-header">
+            <div>
+              <h1 class="page-title">每周任务</h1>
+              <p class="page-subtitle">为每个工作日安排任务，完成后点击勾选框，任务会自动隐藏。</p>
+            </div>
+            <button class="btn-tasklist" data-list="weekly">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
+                <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
+              </svg>
+              查看任务列表
+            </button>
+          </header>
+
+          <div class="add-task-card">
+            <input id="add-task-input" class="add-task-input" type="text" placeholder="输入任务内容…" maxlength="80" />
+            <select id="add-task-day" class="add-task-select">
+              <option value="1">星期一</option>
+              <option value="2">星期二</option>
+              <option value="3">星期三</option>
+              <option value="4">星期四</option>
+              <option value="5">星期五</option>
+              <option value="6">星期六</option>
+              <option value="7">星期日</option>
+            </select>
+            <button id="add-task-btn" class="btn-primary">添加任务</button>
+          </div>
+
+          <div id="weekly-lists" class="weekly-lists"></div>
+          <div id="weekly-empty" class="big-empty" hidden>
+            <svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 12h-6l-2 3h-4l-2-3H2" />
+              <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+            </svg>
+            <span>暂无任务</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 每日任务视图 -->
+      <section class="view" id="view-daily">
+        <div class="weekly-panel">
+          <header class="page-header">
+            <div>
+              <h1 class="page-title">每日任务</h1>
+              <p class="page-subtitle">每天重复的待办事项，第二天会自动重新填充。</p>
+            </div>
+            <button class="btn-tasklist" data-list="daily">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
+                <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
+              </svg>
+              查看任务列表
+            </button>
+          </header>
+
+          <div class="add-task-card">
+            <input id="add-daily-input" class="add-task-input" type="text" placeholder="输入每日任务内容…" maxlength="80" />
+            <button id="add-daily-btn" class="btn-primary">添加任务</button>
+          </div>
+
+          <div id="daily-list" class="weekly-lists"></div>
+          <div id="daily-empty" class="big-empty" hidden>
+            <svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 12h-6l-2 3h-4l-2-3H2" />
+              <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+            </svg>
+            <span>暂无任务</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 日历视图 -->
+      <section class="view" id="view-calendar">
+        <div class="calendar-panel">
+          <div class="calendar-toolbar">
+            <h1 class="page-title" id="month-title">2025年1月</h1>
+            <div class="toolbar-actions">
+              <button id="prev-month" class="icon-btn-nav" title="上个月">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+              </button>
+              <button id="today-btn" class="btn-ghost">今天</button>
+              <button id="next-month" class="icon-btn-nav" title="下个月">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="calendar-weekdays">
+            <span>周一</span><span>周二</span><span>周三</span><span>周四</span><span>周五</span><span>周六</span><span>周日</span>
+          </div>
+
+          <div id="calendar-grid" class="calendar-grid"></div>
+          <p class="calendar-hint">双击日期可添加当天事项 · 单击日期可展开 / 收回事项预览</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- 日期编辑弹层 -->
+  <div id="day-modal-overlay" class="overlay">
+    <div id="day-modal" class="day-modal">
+      <div class="day-modal-header">
+        <div class="day-modal-title" id="day-modal-title">日期</div>
+        <button id="day-modal-close" class="modal-close" title="关闭">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+        </button>
+      </div>
+      <div class="day-modal-body">
+        <div id="day-modal-events" class="editor-events"></div>
+        <button id="add-event-btn" class="add-event-btn">＋ 添加事项</button>
+      </div>
+      <div class="day-modal-footer">
+        <button id="clear-all-btn" class="btn-danger">一键清空</button>
+        <button id="confirm-btn" class="btn-primary">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 任务列表弹层 -->
+  <div id="tasklist-overlay" class="overlay">
+    <div id="tasklist-modal" class="tasklist-modal">
+      <div class="day-modal-header">
+        <div class="day-modal-title" id="tasklist-title">任务列表</div>
+        <button id="tasklist-close" class="modal-close" title="关闭">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+        </button>
+      </div>
+      <div id="tasklist-body" class="tasklist-body"></div>
+    </div>
+  </div>
+
+  <!-- 图标选择弹层 -->
+  <div id="icon-popover" class="icon-popover"></div>
+
+  <!-- 提示 -->
+  <div id="toast" class="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
