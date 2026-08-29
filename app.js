@@ -5,6 +5,7 @@
   const STORAGE_TASKS = 'tasktrack.tasks.v1';
   const STORAGE_DAILY = 'tasktrack.daily.v1';
   const STORAGE_EVENTS = 'tasktrack.events.v1';
+  const STORAGE_TODO = 'tasktrack.todo.v1';
   const WEEKDAYS = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'];
   const EMOJIS = [
     '📌', '📝', '✅', '⚠️', '🎯', '💡', '⭐', '❤️',
@@ -27,7 +28,8 @@
     tasks: [],      // 每周任务 { id, title, weekday(1-7), done, createdAt }
     dailyTasks: [], // 每日任务 { id, title, done, createdAt }
     dailyDate: '',  // 每日任务最近一次“重置”的日期 YYYY-MM-DD
-    events: {}      // 日历 { 'YYYY-MM-DD': [{ id, icon, text }] }
+    events: {},     // 日历 { 'YYYY-MM-DD': [{ id, icon, text }] }
+    todoTasks: []   // 待办清单 { id, title, done, createdAt }
   };
 
   function load() {
@@ -44,6 +46,9 @@
 
       const e = localStorage.getItem(STORAGE_EVENTS);
       if (e) state.events = JSON.parse(e);
+
+      const td = localStorage.getItem(STORAGE_TODO);
+      if (td) state.todoTasks = JSON.parse(td);
     } catch (err) {
       console.warn('读取本地数据失败', err);
     }
@@ -56,6 +61,9 @@
   }
   function saveEvents() {
     try { localStorage.setItem(STORAGE_EVENTS, JSON.stringify(state.events)); } catch (e) {}
+  }
+  function saveTodo() {
+    try { localStorage.setItem(STORAGE_TODO, JSON.stringify(state.todoTasks)); } catch (e) {}
   }
 
   // ---------- 工具 ----------
@@ -86,6 +94,7 @@
   const views = {
     weekly: $('#view-weekly'),
     daily: $('#view-daily'),
+    todo: $('#view-todo'),
     calendar: $('#view-calendar')
   };
 
@@ -101,6 +110,12 @@
   const addDailyBtn = $('#add-daily-btn');
   const dailyList = $('#daily-list');
   const dailyEmpty = $('#daily-empty');
+
+  // 待办清单
+  const addTodoInput = $('#add-todo-input');
+  const addTodoBtn = $('#add-todo-btn');
+  const todoList = $('#todo-list');
+  const todoEmpty = $('#todo-empty');
 
   // 日历
   const monthTitle = $('#month-title');
@@ -136,6 +151,24 @@
     toast.classList.add('show');
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { toast.classList.remove('show'); }, 2200);
+  }
+
+  // ---------- 任务完成动画 ----------
+  // 字体变淡 + 删除线从左到右 + 整个任务块逐渐消失
+  const COMPLETE_ANIM_MS = 460;
+  function animateTaskCompletion(taskEl, onDone) {
+    if (!taskEl || taskEl.classList.contains('completing')) return;
+    // 锁定实际高度作为收起起点；临时关闭过渡，避免从默认 max-height 跳变
+    taskEl.style.transition = 'none';
+    taskEl.style.maxHeight = taskEl.scrollHeight + 'px';
+    void taskEl.offsetHeight; // 强制回流，提交起始高度
+    taskEl.style.transition = '';
+    taskEl.classList.add('completing');
+    setTimeout(function () {
+      taskEl.classList.remove('completing');
+      taskEl.style.maxHeight = '';
+      if (onDone) onDone();
+    }, COMPLETE_ANIM_MS);
   }
 
   // ---------- 侧边栏切换 ----------
@@ -183,7 +216,9 @@
 
     $$('.task', weeklyLists).forEach(function (el) {
       const id = el.dataset.id;
-      el.querySelector('.task-check').addEventListener('click', function () { toggleTask(id); });
+      el.querySelector('.task-check').addEventListener('click', function () {
+        animateTaskCompletion(el, function () { completeTask(id); });
+      });
       el.querySelector('.task-delete').addEventListener('click', function () { deleteTask(id); });
     });
   }
@@ -191,7 +226,7 @@
   function taskHTML(t) {
     return '<div class="task' + (t.done ? ' done' : '') + '" data-id="' + t.id + '">' +
       '<button class="task-check" title="标记完成">' + CHECK_SVG + '</button>' +
-      '<span class="task-title">' + escapeHtml(t.title) + '</span>' +
+      '<span class="task-title"><span class="task-title-text">' + escapeHtml(t.title) + '</span></span>' +
       '<button class="task-delete" title="删除">✕</button>' +
     '</div>';
   }
@@ -211,10 +246,10 @@
     showToast('已添加到' + WEEKDAYS[weekday - 1]);
   }
 
-  function toggleTask(id) {
+  function completeTask(id) {
     const t = state.tasks.find(function (x) { return x.id === id; });
     if (!t) return;
-    t.done = !t.done;
+    t.done = true;
     saveTasks();
     renderWeekly();
   }
@@ -266,7 +301,9 @@
 
     $$('.task', dailyList).forEach(function (el) {
       const id = el.dataset.id;
-      el.querySelector('.task-check').addEventListener('click', function () { toggleDailyTask(id); });
+      el.querySelector('.task-check').addEventListener('click', function () {
+        animateTaskCompletion(el, function () { completeDailyTask(id); });
+      });
       el.querySelector('.task-delete').addEventListener('click', function () { deleteDailyTask(id); });
     });
   }
@@ -285,10 +322,10 @@
     showToast('已添加每日任务');
   }
 
-  function toggleDailyTask(id) {
+  function completeDailyTask(id) {
     const t = state.dailyTasks.find(function (x) { return x.id === id; });
     if (!t) return;
-    t.done = !t.done;
+    t.done = true;
     saveDaily();
     renderDaily();
   }
@@ -303,6 +340,72 @@
   addDailyBtn.addEventListener('click', addDailyTask);
   addDailyInput.addEventListener('keydown', function (e) {
     if (e.key === 'Enter') addDailyTask();
+  });
+
+  // ---------- 待办清单模块 ----------
+  function renderTodo() {
+    todoList.innerHTML = '';
+
+    const undone = state.todoTasks.filter(function (t) { return !t.done; });
+    if (undone.length === 0) {
+      todoEmpty.hidden = false;
+      return;
+    }
+    todoEmpty.hidden = true;
+
+    undone.sort(function (a, b) { return (a.createdAt || 0) - (b.createdAt || 0); });
+
+    const card = document.createElement('section');
+    card.className = 'day-list';
+    card.innerHTML =
+      '<header class="day-list-header">' +
+        '<h3 class="day-list-title">待办清单</h3>' +
+        '<span class="day-list-count">' + undone.length + ' 项</span>' +
+      '</header>' +
+      '<div class="task-list">' + undone.map(taskHTML).join('') + '</div>';
+    todoList.appendChild(card);
+
+    $$('.task', todoList).forEach(function (el) {
+      const id = el.dataset.id;
+      el.querySelector('.task-check').addEventListener('click', function () {
+        animateTaskCompletion(el, function () { completeTodoTask(id); });
+      });
+      el.querySelector('.task-delete').addEventListener('click', function () { deleteTodoTask(id); });
+    });
+  }
+
+  function addTodoTask() {
+    const title = addTodoInput.value.trim();
+    if (!title) {
+      showToast('请输入待办内容');
+      addTodoInput.focus();
+      return;
+    }
+    state.todoTasks.push({ id: uid(), title: title, done: false, createdAt: Date.now() });
+    saveTodo();
+    renderTodo();
+    addTodoInput.value = '';
+    showToast('已添加待办');
+  }
+
+  function completeTodoTask(id) {
+    const t = state.todoTasks.find(function (x) { return x.id === id; });
+    if (!t) return;
+    t.done = true;
+    saveTodo();
+    renderTodo();
+  }
+
+  function deleteTodoTask(id) {
+    state.todoTasks = state.todoTasks.filter(function (x) { return x.id !== id; });
+    saveTodo();
+    renderTodo();
+    showToast('待办已删除');
+  }
+
+  addTodoBtn.addEventListener('click', addTodoTask);
+  addTodoInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') addTodoTask();
   });
 
   // ---------- 查看任务列表模块 ----------
@@ -787,5 +890,6 @@
   ensureDailyReset();
   renderWeekly();
   renderDaily();
+  renderTodo();
   renderCalendar();
 })();

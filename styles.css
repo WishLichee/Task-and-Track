@@ -304,6 +304,11 @@ input, select { font-family: inherit; }
   gap: 12px;
   padding: 11px 4px;
   border-bottom: 1px solid #f0f1f6;
+  max-height: 200px;
+  overflow: hidden;
+  opacity: 1;
+  transition: opacity 0.4s ease, max-height 0.42s cubic-bezier(0.4, 0, 0.2, 1),
+    padding 0.42s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.42s ease;
 }
 .task:last-child { border-bottom: none; }
 
@@ -325,11 +330,53 @@ input, select { font-family: inherit; }
 
 .task-title {
   flex: 1;
+  min-width: 0;
   font-size: 14.5px;
-  word-break: break-word;
-  transition: color 0.16s ease;
 }
-.task.done .task-title { color: var(--text-muted); text-decoration: line-through; }
+
+.task-title-text {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  word-break: break-word;
+  vertical-align: top;
+  transition: color 0.4s ease, opacity 0.4s ease;
+}
+
+/* 删除线：从左到右逐渐显示 */
+.task-title-text::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  height: 1.5px;
+  width: 0;
+  background: currentColor;
+  transform: translateY(-50%);
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.task.done .task-title-text { color: var(--text-muted); text-decoration: line-through; }
+
+/* 完成任务动画：字体变淡 + 删除线展开 + 任务块整体消失 */
+.task.completing {
+  opacity: 0;
+  max-height: 0 !important;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-bottom-color: transparent;
+  pointer-events: none;
+}
+.task.completing .task-check {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.task.completing .task-title-text {
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+.task.completing .task-title-text::after { width: 100%; }
 
 .task-delete {
   color: #c3c8d4;
