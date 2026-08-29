@@ -6,6 +6,7 @@
   const STORAGE_DAILY = 'tasktrack.daily.v1';
   const STORAGE_EVENTS = 'tasktrack.events.v1';
   const STORAGE_TODO = 'tasktrack.todo.v1';
+  const STORAGE_PRODUCTS = 'tasktrack.products.v1';
   const WEEKDAYS = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'];
   const EMOJIS = [
     '📌', '📝', '✅', '⚠️', '🎯', '💡', '⭐', '❤️',
@@ -29,7 +30,8 @@
     dailyTasks: [], // 每日任务 { id, title, done, createdAt }
     dailyDate: '',  // 每日任务最近一次“重置”的日期 YYYY-MM-DD
     events: {},     // 日历 { 'YYYY-MM-DD': [{ id, icon, text }] }
-    todoTasks: []   // 待办清单 { id, title, done, createdAt }
+    todoTasks: [],  // 待办清单 { id, title, done, createdAt }
+    products: []    // 选品集合 { id, name, xianyu, xhs, tmall, douyin, price, charts: { exposure:[], views:[], clicks:[], sales:[], afterSales:[] } }
   };
 
   function load() {
@@ -49,6 +51,9 @@
 
       const td = localStorage.getItem(STORAGE_TODO);
       if (td) state.todoTasks = JSON.parse(td);
+
+      const pr = localStorage.getItem(STORAGE_PRODUCTS);
+      if (pr) state.products = normalizeProducts(JSON.parse(pr));
     } catch (err) {
       console.warn('读取本地数据失败', err);
     }
@@ -64,6 +69,23 @@
   }
   function saveTodo() {
     try { localStorage.setItem(STORAGE_TODO, JSON.stringify(state.todoTasks)); } catch (e) {}
+  }
+  function saveProducts() {
+    try { localStorage.setItem(STORAGE_PRODUCTS, JSON.stringify(state.products)); } catch (e) {}
+  }
+
+  // 确保每个选品都具备 5 张数据图字段（兼容旧数据 / 手动构造）
+  function emptyCharts() {
+    return { exposure: [], views: [], clicks: [], sales: [], afterSales: [] };
+  }
+  function normalizeProducts(list) {
+    if (!Array.isArray(list)) return [];
+    return list.map(function (p) {
+      const base = { id: '', name: '', xianyu: '', xhs: '', tmall: '', douyin: '', price: '' };
+      Object.assign(base, p);
+      base.charts = Object.assign(emptyCharts(), p.charts || {});
+      return base;
+    });
   }
 
   // ---------- 工具 ----------
@@ -95,6 +117,7 @@
     weekly: $('#view-weekly'),
     daily: $('#view-daily'),
     todo: $('#view-todo'),
+    products: $('#view-products'),
     calendar: $('#view-calendar')
   };
 
@@ -116,6 +139,38 @@
   const addTodoBtn = $('#add-todo-btn');
   const todoList = $('#todo-list');
   const todoEmpty = $('#todo-empty');
+
+  // 选品集合
+  const addProductBtn = $('#add-product-btn');
+  const productsList = $('#products-list');
+  const productsEmpty = $('#products-empty');
+
+  // 数据图
+  const chartsOverlay = $('#charts-overlay');
+  const chartsModal = $('#charts-modal');
+  const chartsTitle = $('#charts-title');
+  const chartsBody = $('#charts-body');
+  const chartsClose = $('#charts-close');
+
+  const chartViewer = $('#chart-viewer');
+  const chartViewerInner = $('#chart-viewer-inner');
+
+  const confirmOverlay = $('#confirm-overlay');
+  const confirmMessage = $('#confirm-message');
+  const confirmOk = $('#confirm-ok');
+  const confirmCancel = $('#confirm-cancel');
+
+  const pointOverlay = $('#point-overlay');
+  const pointTitle = $('#point-title');
+  const pointDate = $('#point-date');
+  const pointValue = $('#point-value');
+  const pointDelete = $('#point-delete');
+  const pointCancel = $('#point-cancel');
+  const pointSave = $('#point-save');
+  const pointClose = $('#point-close');
+
+  const zoomMenu = $('#zoom-menu');
+  const chartTooltip = $('#chart-tooltip');
 
   // 日历
   const monthTitle = $('#month-title');
@@ -406,6 +461,540 @@
   addTodoBtn.addEventListener('click', addTodoTask);
   addTodoInput.addEventListener('keydown', function (e) {
     if (e.key === 'Enter') addTodoTask();
+  });
+
+  // ---------- 选品集合模块 ----------
+  const CHART_METRICS = [
+    { key: 'exposure', label: '曝光量' },
+    { key: 'views', label: '浏览量' },
+    { key: 'clicks', label: '点击量' },
+    { key: 'sales', label: '成交量' },
+    { key: 'afterSales', label: '售后量' }
+  ];
+  const PRODUCT_FIELDS = [
+    { key: 'xianyu', label: '闲鱼搜索指数', badge: '闲', badgeClass: 'badge-xianyu' },
+    { key: 'xhs', label: '小红书相关笔记热度', badge: '红', badgeClass: 'badge-xhs' },
+    { key: 'tmall', label: '天猫相关评论区热度', badge: '猫', badgeClass: 'badge-tmall' },
+    { key: 'douyin', label: '抖音商城相关评论区热度', badge: '抖', badgeClass: 'badge-douyin' },
+    { key: 'price', label: '进货价', badge: '', badgeClass: '' }
+  ];
+
+  function getProduct(id) {
+    return state.products.find(function (p) { return p.id === id; }) || null;
+  }
+
+  function renderProducts() {
+    productsList.innerHTML = '';
+    productsEmpty.hidden = state.products.length > 0;
+    state.products.forEach(function (p) { productsList.appendChild(buildProductCard(p)); });
+  }
+
+  function buildProductCard(p) {
+    const card = document.createElement('div');
+    card.className = 'product-card';
+    card.dataset.id = p.id;
+
+    let fieldsHtml = '';
+    PRODUCT_FIELDS.forEach(function (f) {
+      const badgeHtml = f.badge ? '<span class="badge ' + f.badgeClass + '">' + f.badge + '</span>' : '';
+      fieldsHtml +=
+        '<div class="product-field">' +
+          badgeHtml +
+          '<span class="field-label">' + f.label + '</span>' +
+          '<input class="field-input" type="number" step="any" data-field="' + f.key + '" value="' + escapeHtml(String(p[f.key] || '')) + '" />' +
+        '</div>';
+    });
+
+    card.innerHTML =
+      '<div class="product-header">' +
+        '<input class="product-name" type="text" placeholder="输入选品名称…" maxlength="60" value="' + escapeHtml(p.name || '') + '" />' +
+        '<button class="product-delete" title="删除选品">✕</button>' +
+      '</div>' +
+      '<div class="product-fields">' + fieldsHtml + '</div>' +
+      '<button class="product-charts-btn" title="打开数据图">' +
+        '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18" /><path d="m7 14 4-4 3 3 5-6" /></svg>' +
+        '数据图' +
+      '</button>';
+
+    card.querySelector('.product-name').addEventListener('input', function (e) {
+      updateProductField(p.id, 'name', e.target.value);
+    });
+    card.querySelector('.product-delete').addEventListener('click', function () { deleteProduct(p.id); });
+    card.querySelector('.product-charts-btn').addEventListener('click', function () { openCharts(p.id); });
+    $$('.field-input', card).forEach(function (inp) {
+      inp.addEventListener('input', function () { updateProductField(p.id, inp.dataset.field, inp.value); });
+    });
+
+    return card;
+  }
+
+  function addProduct() {
+    state.products.push({
+      id: uid(), name: '',
+      xianyu: '', xhs: '', tmall: '', douyin: '', price: '',
+      charts: emptyCharts()
+    });
+    saveProducts();
+    renderProducts();
+  }
+
+  function deleteProduct(id) {
+    state.products = state.products.filter(function (x) { return x.id !== id; });
+    saveProducts();
+    renderProducts();
+    showToast('选品已删除');
+  }
+
+  function updateProductField(id, key, value) {
+    const p = getProduct(id);
+    if (!p) return;
+    p[key] = value;
+    saveProducts();
+  }
+
+  addProductBtn.addEventListener('click', addProduct);
+
+  // ---------- 数据图模块 ----------
+  let currentChartsProduct = null;
+  let pointEditState = null;
+  let viewState = null;
+
+  function findPoint(productId, metricKey, pointId) {
+    const p = getProduct(productId);
+    if (!p) return null;
+    const arr = p.charts[metricKey] || [];
+    return arr.find(function (x) { return x.id === pointId; }) || null;
+  }
+
+  function niceMax(v) {
+    if (v <= 0) return 1;
+    const exp = Math.floor(Math.log10(v));
+    const base = Math.pow(10, exp);
+    const m = v / base;
+    let n;
+    if (m <= 1) n = 1;
+    else if (m <= 2) n = 2;
+    else if (m <= 5) n = 5;
+    else n = 10;
+    return n * base;
+  }
+
+  function fmtNum(v) {
+    if (Number.isInteger(v)) return String(v);
+    return String(Math.round(v * 100) / 100);
+  }
+
+  function fmtDate(key) {
+    const parts = String(key).split('-');
+    if (parts.length !== 3) return key;
+    return parts[0].slice(-2) + '-' + parts[1] + '-' + parts[2];
+  }
+
+  function chartSVG(points) {
+    const W = 320, H = 200;
+    const padL = 42, padR = 12, padT = 14, padB = 26;
+    const x0 = padL, x1 = W - padR, y0 = padT, y1 = H - padB;
+    const pw = x1 - x0, ph = y1 - y0;
+
+    const sorted = points.slice().sort(function (a, b) {
+      return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0);
+    });
+    const maxValue = sorted.length ? Math.max.apply(null, sorted.map(function (p) { return Number(p.value) || 0; })) : 0;
+    const maxV = niceMax(maxValue);
+
+    let s = '';
+    const grid = 4;
+    for (let i = 0; i <= grid; i++) {
+      const val = maxV * i / grid;
+      const y = y1 - (val / maxV) * ph;
+      s += '<line class="chart-grid" x1="' + x0 + '" y1="' + y + '" x2="' + x1 + '" y2="' + y + '"/>';
+      s += '<text class="chart-axis-label" x="' + (x0 - 5) + '" y="' + (y + 3) + '" text-anchor="end">' + fmtNum(val) + '</text>';
+    }
+
+    s += '<line class="chart-axis" x1="' + x0 + '" y1="' + y0 + '" x2="' + x0 + '" y2="' + y1 + '"/>';
+    s += '<line class="chart-axis" x1="' + x0 + '" y1="' + y1 + '" x2="' + x1 + '" y2="' + y1 + '"/>';
+
+    let minT = null, maxT = null;
+    sorted.forEach(function (p) {
+      const t = new Date(p.date + 'T00:00:00').getTime();
+      if (minT === null || t < minT) minT = t;
+      if (maxT === null || t > maxT) maxT = t;
+    });
+
+    const pts = sorted.map(function (p) {
+      const t = new Date(p.date + 'T00:00:00').getTime();
+      let x;
+      if (sorted.length === 1 || maxT === minT) x = x0 + pw / 2;
+      else x = x0 + (t - minT) / (maxT - minT) * pw;
+      const y = y1 - (Math.max(0, Number(p.value) || 0) / maxV) * ph;
+      return { p: p, x: x, y: y };
+    });
+
+    pts.forEach(function (pt) {
+      s += '<text class="chart-axis-label chart-date-label" x="' + pt.x + '" y="' + (y1 + 14) + '" text-anchor="middle">' + fmtDate(pt.p.date) + '</text>';
+    });
+
+    if (pts.length >= 2) {
+      const coords = pts.map(function (pt) { return pt.x.toFixed(1) + ',' + pt.y.toFixed(1); }).join(' ');
+      s += '<polyline class="chart-line" points="' + coords + '"/>';
+    }
+
+    pts.forEach(function (pt) {
+      s += '<circle class="chart-point" data-id="' + pt.p.id + '" cx="' + pt.x.toFixed(1) + '" cy="' + pt.y.toFixed(1) + '" r="4"/>';
+    });
+
+    return '<svg class="chart-svg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet">' + s + '</svg>';
+  }
+
+  function renderCharts(productId) {
+    const product = getProduct(productId);
+    if (!product) return;
+    currentChartsProduct = productId;
+    chartsTitle.textContent = '数据图 · ' + (product.name || '未命名选品');
+    chartsBody.innerHTML = '';
+
+    CHART_METRICS.forEach(function (m) {
+      const card = document.createElement('div');
+      card.className = 'chart-card';
+      card.dataset.metric = m.key;
+      const points = product.charts[m.key] || [];
+      card.innerHTML =
+        '<div class="chart-card-title">' + m.label + '</div>' +
+        '<div class="chart-body">' + chartSVG(points) + '</div>';
+      chartsBody.appendChild(card);
+      bindChartNormal(card, productId, m.key);
+    });
+  }
+
+  function bindChartNormal(card, productId, metricKey) {
+    const svg = card.querySelector('.chart-svg');
+    let singleTimer = null;
+
+    function schedule(fn) {
+      if (singleTimer) clearTimeout(singleTimer);
+      singleTimer = setTimeout(function () { singleTimer = null; fn(); }, 260);
+    }
+
+    svg.addEventListener('click', function (e) {
+      if (viewState) return;
+      if (e.target.closest('.chart-point')) return;
+      schedule(function () { openPointEditor(productId, metricKey, null, { date: toKey(new Date()) }); });
+    });
+
+    svg.addEventListener('dblclick', function () {
+      if (singleTimer) { clearTimeout(singleTimer); singleTimer = null; }
+      requestEnterViewMode(card, productId, metricKey);
+    });
+
+    $$('.chart-point', card).forEach(function (c) {
+      c.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (viewState) return;
+        const id = c.dataset.id;
+        schedule(function () { openPointEditor(productId, metricKey, id, null); });
+      });
+      c.addEventListener('mouseenter', function () {
+        c.classList.add('hovered');
+        const p = findPoint(productId, metricKey, c.dataset.id);
+        if (p) {
+          chartTooltip.textContent = fmtDate(p.date) + '　' + fmtNum(p.value);
+          chartTooltip.classList.add('show');
+        }
+      });
+      c.addEventListener('mousemove', function (e) {
+        chartTooltip.style.left = e.clientX + 'px';
+        chartTooltip.style.top = e.clientY + 'px';
+      });
+      c.addEventListener('mouseleave', function () {
+        c.classList.remove('hovered');
+        chartTooltip.classList.remove('show');
+      });
+    });
+  }
+
+  function openCharts(productId) {
+    renderCharts(productId);
+    chartsOverlay.classList.add('open');
+  }
+
+  function closeCharts() {
+    chartsOverlay.classList.remove('open');
+    setTimeout(function () { currentChartsProduct = null; }, 320);
+  }
+
+  chartsClose.addEventListener('click', closeCharts);
+  chartsOverlay.addEventListener('click', function (e) {
+    if (e.target === chartsOverlay) closeCharts();
+  });
+
+  // ---------- 数据点编辑 ----------
+  function openPointEditor(productId, metricKey, pointId, defaults) {
+    if (!getProduct(productId)) return;
+    pointEditState = { productId: productId, metricKey: metricKey, pointId: pointId };
+    const point = pointId ? findPoint(productId, metricKey, pointId) : null;
+    const metric = CHART_METRICS.find(function (m) { return m.key === metricKey; });
+    pointTitle.textContent = (pointId ? '修改' : '新增') + '数据点 · ' + (metric ? metric.label : '');
+    pointDate.value = point ? point.date : (defaults && defaults.date ? defaults.date : toKey(new Date()));
+    pointValue.value = point ? point.value : '';
+    pointDelete.hidden = !pointId;
+    pointOverlay.classList.add('open');
+    setTimeout(function () { pointValue.focus(); }, 60);
+  }
+
+  function closePointEditor() {
+    pointOverlay.classList.remove('open');
+    pointEditState = null;
+  }
+
+  function savePoint() {
+    const st = pointEditState;
+    if (!st) return;
+    const date = pointDate.value;
+    const value = parseFloat(pointValue.value);
+    if (!date) { showToast('请选择日期'); return; }
+    if (!isFinite(value)) { showToast('请输入有效数值'); return; }
+    const product = getProduct(st.productId);
+    if (!product) return;
+    const arr = product.charts[st.metricKey] || (product.charts[st.metricKey] = []);
+    if (st.pointId) {
+      const p = arr.find(function (x) { return x.id === st.pointId; });
+      if (p) { p.date = date; p.value = value; }
+    } else {
+      arr.push({ id: uid(), date: date, value: value });
+    }
+    saveProducts();
+    closePointEditor();
+    if (currentChartsProduct === st.productId) renderCharts(st.productId);
+  }
+
+  function deletePoint() {
+    const st = pointEditState;
+    if (!st || !st.pointId) return;
+    const product = getProduct(st.productId);
+    if (!product) return;
+    product.charts[st.metricKey] = (product.charts[st.metricKey] || []).filter(function (x) { return x.id !== st.pointId; });
+    saveProducts();
+    closePointEditor();
+    if (currentChartsProduct === st.productId) renderCharts(st.productId);
+  }
+
+  pointSave.addEventListener('click', savePoint);
+  pointCancel.addEventListener('click', closePointEditor);
+  pointClose.addEventListener('click', closePointEditor);
+  pointDelete.addEventListener('click', deletePoint);
+  pointOverlay.addEventListener('click', function (e) {
+    if (e.target === pointOverlay) closePointEditor();
+  });
+  pointDate.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); savePoint(); }
+  });
+  pointValue.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); savePoint(); }
+  });
+
+  // ---------- 确认弹层 ----------
+  let confirmResolve = null;
+  function showConfirm(msg) {
+    return new Promise(function (resolve) {
+      confirmMessage.textContent = msg;
+      confirmOverlay.classList.add('open');
+      confirmResolve = resolve;
+    });
+  }
+  function resolveConfirm(val) {
+    if (!confirmResolve) return;
+    const r = confirmResolve;
+    confirmResolve = null;
+    confirmOverlay.classList.remove('open');
+    r(val);
+  }
+  confirmOk.addEventListener('click', function () { resolveConfirm(true); });
+  confirmCancel.addEventListener('click', function () { resolveConfirm(false); });
+  confirmOverlay.addEventListener('click', function (e) {
+    if (e.target === confirmOverlay) resolveConfirm(false);
+  });
+
+  // ---------- 数据图查看模式 ----------
+  function requestEnterViewMode(card, productId, metricKey) {
+    if (viewState) return;
+    showConfirm('是否进入查看模式？').then(function (ok) {
+      if (ok) enterViewMode(card, productId, metricKey);
+    });
+  }
+
+  function requestExitViewMode() {
+    if (!viewState) return;
+    showConfirm('是否退出查看模式？').then(function (ok) {
+      if (ok) exitViewMode();
+    });
+  }
+
+  function enterViewMode(card, productId, metricKey) {
+    if (viewState) return;
+    const startRect = card.getBoundingClientRect();
+    const startW = card.offsetWidth;
+
+    // 占位保持数据图模块布局不变
+    const ph = document.createElement('div');
+    ph.className = 'chart-placeholder';
+    ph.style.width = card.offsetWidth + 'px';
+    ph.style.height = card.offsetHeight + 'px';
+    card.parentNode.insertBefore(ph, card);
+
+    chartViewer.classList.add('open');
+    chartViewerInner.appendChild(card);
+    card.classList.add('viewing');
+    card.style.width = startW + 'px';
+
+    const endRect = card.getBoundingClientRect();
+    const dx = (startRect.left + startRect.width / 2) - (endRect.left + endRect.width / 2);
+    const dy = (startRect.top + startRect.height / 2) - (endRect.top + endRect.height / 2);
+    const baseScale = 1.2;
+
+    card.style.transition = 'none';
+    card.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(1)';
+    void card.offsetHeight;
+    card.style.transition = '';
+    card.style.transform = 'translate(0px,0px) scale(' + baseScale + ')';
+
+    viewState = {
+      productId: productId, metricKey: metricKey, card: card,
+      contentEl: card.querySelector('.chart-svg'), placeholder: ph,
+      baseScale: baseScale, contentScale: 1, panX: 0, panY: 0, zoomDir: 'in', startW: startW
+    };
+
+    setTimeout(function () { bindViewInteractions(card); }, 460);
+  }
+
+  function exitViewMode() {
+    const vs = viewState;
+    if (!vs) return;
+    const card = vs.card;
+    const targetRect = vs.placeholder.getBoundingClientRect();
+    const tdx = (targetRect.left + targetRect.width / 2) - window.innerWidth / 2;
+    const tdy = (targetRect.top + targetRect.height / 2) - window.innerHeight / 2;
+
+    // 内容复位到自然比例，仅动画数据图盒子
+    if (vs.contentEl) vs.contentEl.style.transform = '';
+
+    card.style.transition = 'none';
+    card.style.transform = 'translate(0px,0px) scale(' + vs.baseScale + ')';
+    void card.offsetHeight;
+    card.style.transition = 'transform 0.45s cubic-bezier(0.22, 0.9, 0.32, 1)';
+    card.style.transform = 'translate(' + tdx + 'px,' + tdy + 'px) scale(1)';
+
+    chartViewer.classList.remove('open');
+    viewState = null;
+
+    setTimeout(function () {
+      card.style.transition = '';
+      card.style.transform = '';
+      vs.placeholder.replaceWith(card);
+      card.classList.remove('viewing');
+      card.style.width = '';
+      renderCharts(currentChartsProduct);
+    }, 460);
+  }
+
+  function applyContentTransform() {
+    if (!viewState || !viewState.contentEl) return;
+    viewState.contentEl.style.transform = 'translate(' + viewState.panX + 'px,' + viewState.panY + 'px) scale(' + viewState.contentScale + ')';
+  }
+
+  function zoomContent(factor) {
+    if (!viewState) return;
+    viewState.contentScale *= factor;
+    if (viewState.contentScale < 0.2) viewState.contentScale = 0.2;
+    if (viewState.contentScale > 8) viewState.contentScale = 8;
+    if (viewState.contentScale <= 1) {
+      viewState.panX = 0;
+      viewState.panY = 0;
+    }
+    applyContentTransform();
+  }
+
+  function bindViewInteractions(card) {
+    let dragging = false, moved = false;
+    let startX = 0, startY = 0, origPanX = 0, origPanY = 0;
+    let singleTimer = null;
+
+    card.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0) return;
+      dragging = true; moved = false;
+      startX = e.clientX; startY = e.clientY;
+      origPanX = viewState.panX; origPanY = viewState.panY;
+      try { card.setPointerCapture(e.pointerId); } catch (err) {}
+      e.preventDefault();
+    });
+
+    card.addEventListener('pointermove', function (e) {
+      if (!dragging || !viewState) return;
+      // 只有内容放大后（contentScale > 1）才允许拖拽，缩小/未放大时不可拖拽
+      if (viewState.contentScale <= 1) return;
+      const dx = e.clientX - startX, dy = e.clientY - startY;
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) moved = true;
+      if (moved) {
+        viewState.panX = origPanX + dx;
+        viewState.panY = origPanY + dy;
+        applyContentTransform();
+      }
+    });
+
+    card.addEventListener('pointerup', function () {
+      if (!dragging || !viewState) return;
+      dragging = false;
+      if (!moved) {
+        if (singleTimer) clearTimeout(singleTimer);
+        singleTimer = setTimeout(function () {
+          singleTimer = null;
+          zoomContent(viewState && viewState.zoomDir === 'out' ? 1 / 1.2 : 1.2);
+        }, 260);
+      }
+    });
+
+    card.addEventListener('dblclick', function () {
+      if (singleTimer) { clearTimeout(singleTimer); singleTimer = null; }
+      requestExitViewMode();
+    });
+
+    card.addEventListener('contextmenu', function (e) {
+      e.preventDefault();
+      openZoomMenu(e.clientX, e.clientY);
+    });
+  }
+
+  function openZoomMenu(x, y) {
+    zoomMenu.classList.add('open');
+    const w = zoomMenu.offsetWidth, h = zoomMenu.offsetHeight;
+    let left = x, top = y;
+    if (left + w > window.innerWidth - 8) left = window.innerWidth - w - 8;
+    if (top + h > window.innerHeight - 8) top = window.innerHeight - h - 8;
+    if (left < 8) left = 8;
+    if (top < 8) top = 8;
+    zoomMenu.style.left = left + 'px';
+    zoomMenu.style.top = top + 'px';
+  }
+
+  function closeZoomMenu() { zoomMenu.classList.remove('open'); }
+
+  zoomMenu.addEventListener('click', function (e) {
+    const btn = e.target.closest('button[data-zoom]');
+    if (!btn) return;
+    if (viewState) viewState.zoomDir = btn.dataset.zoom;
+    zoomContent(btn.dataset.zoom === 'in' ? 1.2 : 1 / 1.2);
+    closeZoomMenu();
+  });
+
+  document.addEventListener('click', function (e) {
+    if (zoomMenu.classList.contains('open') && !zoomMenu.contains(e.target)) closeZoomMenu();
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (zoomMenu.classList.contains('open')) { closeZoomMenu(); return; }
+    if (confirmOverlay.classList.contains('open')) { resolveConfirm(false); return; }
+    if (pointOverlay.classList.contains('open')) { closePointEditor(); return; }
+    if (chartsOverlay.classList.contains('open') && !viewState) { closeCharts(); }
   });
 
   // ---------- 查看任务列表模块 ----------
@@ -891,5 +1480,6 @@
   renderWeekly();
   renderDaily();
   renderTodo();
+  renderProducts();
   renderCalendar();
 })();

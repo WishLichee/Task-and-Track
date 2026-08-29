@@ -49,6 +49,15 @@
           </svg>
           <span>待办清单</span>
         </button>
+        <button class="nav-item" data-view="products">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m7.5 4.27 9 5.15" />
+            <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+            <path d="m3.3 7 8.7 5 8.7-5" />
+            <path d="M12 22V12" />
+          </svg>
+          <span>选品集合</span>
+        </button>
         <button class="nav-item" data-view="calendar">
           <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="4" width="18" height="17" rx="2" />
@@ -171,6 +180,30 @@
         </div>
       </section>
 
+      <!-- 选品集合视图 -->
+      <section class="view" id="view-products">
+        <div class="weekly-panel">
+          <header class="page-header">
+            <div>
+              <h1 class="page-title">选品集合</h1>
+              <p class="page-subtitle">管理候选商品，记录各平台热度、进货价与数据图。</p>
+            </div>
+            <button id="add-product-btn" class="btn-primary">新增选品</button>
+          </header>
+
+          <div id="products-list" class="products-list"></div>
+          <div id="products-empty" class="big-empty" hidden>
+            <svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m7.5 4.27 9 5.15" />
+              <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+              <path d="m3.3 7 8.7 5 8.7-5" />
+              <path d="M12 22V12" />
+            </svg>
+            <span>暂无选品</span>
+          </div>
+        </div>
+      </section>
+
       <!-- 日历视图 -->
       <section class="view" id="view-calendar">
         <div class="calendar-panel">
@@ -233,6 +266,73 @@
 
   <!-- 图标选择弹层 -->
   <div id="icon-popover" class="icon-popover"></div>
+
+  <!-- 数据图模块弹层 -->
+  <div id="charts-overlay" class="overlay">
+    <div id="charts-modal" class="charts-modal">
+      <div class="day-modal-header">
+        <div class="day-modal-title" id="charts-title">数据图</div>
+        <button id="charts-close" class="modal-close" title="关闭">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+        </button>
+      </div>
+      <div id="charts-body" class="charts-body"></div>
+    </div>
+  </div>
+
+  <!-- 数据图查看模式（放大居中 + 背景模糊 + 锁定） -->
+  <div id="chart-viewer" class="chart-viewer">
+    <div class="chart-viewer-backdrop"></div>
+    <div id="chart-viewer-inner" class="chart-viewer-inner"></div>
+  </div>
+
+  <!-- 确认弹层 -->
+  <div id="confirm-overlay" class="overlay confirm-overlay">
+    <div class="confirm-modal">
+      <div class="confirm-message" id="confirm-message">确认操作？</div>
+      <div class="confirm-actions">
+        <button id="confirm-cancel" class="btn-ghost">取消</button>
+        <button id="confirm-ok" class="btn-primary">确认</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 数据点编辑弹层 -->
+  <div id="point-overlay" class="overlay point-overlay">
+    <div class="point-modal">
+      <div class="day-modal-header">
+        <div class="day-modal-title" id="point-title">新增数据点</div>
+        <button id="point-close" class="modal-close" title="关闭">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+        </button>
+      </div>
+      <div class="point-body">
+        <label class="point-field">
+          <span class="point-label">日期</span>
+          <input id="point-date" type="date" class="point-input" />
+        </label>
+        <label class="point-field">
+          <span class="point-label">数值</span>
+          <input id="point-value" type="number" step="any" class="point-input" placeholder="输入数值…" />
+        </label>
+      </div>
+      <div class="point-footer">
+        <button id="point-delete" class="btn-danger" hidden>删除</button>
+        <span class="point-footer-spacer"></span>
+        <button id="point-cancel" class="btn-ghost">取消</button>
+        <button id="point-save" class="btn-primary">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 查看模式缩放菜单 -->
+  <div id="zoom-menu" class="zoom-menu">
+    <button data-zoom="in">放大</button>
+    <button data-zoom="out">缩小</button>
+  </div>
+
+  <!-- 数据图悬停提示 -->
+  <div id="chart-tooltip" class="chart-tooltip"></div>
 
   <!-- 提示 -->
   <div id="toast" class="toast"></div>
