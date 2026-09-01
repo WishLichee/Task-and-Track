@@ -7,6 +7,8 @@
   const STORAGE_EVENTS = 'tasktrack.events.v1';
   const STORAGE_TODO = 'tasktrack.todo.v1';
   const STORAGE_PRODUCTS = 'tasktrack.products.v1';
+  const STORAGE_REFRESH = 'tasktrack.refresh.v1';
+  const STORAGE_LONGTERM = 'tasktrack.longterm.v1';
   const WEEKDAYS = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'];
   const EMOJIS = [
     '📌', '📝', '✅', '⚠️', '🎯', '💡', '⭐', '❤️',
@@ -14,6 +16,8 @@
     '✈️', '📚', '🏋️', '💊', '🛒', '🧹', '👶', '🐶',
     '🌱', '💰', '🎂', '📷', '🎵', '🏖️', '☕', '🎁'
   ];
+
+  const DAY_MS = 24 * 60 * 60 * 1000;
 
   const CHECK_SVG = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
 
@@ -31,13 +35,15 @@
     dailyDate: '',  // 每日任务最近一次“重置”的日期 YYYY-MM-DD
     events: {},     // 日历 { 'YYYY-MM-DD': [{ id, icon, text }] }
     todoTasks: [],  // 待办清单 { id, title, done, createdAt }
-    products: []    // 选品集合 { id, name, xianyu, xhs, tmall, douyin, price, charts: { exposure:[], views:[], clicks:[], sales:[], afterSales:[] } }
+    products: [],    // 选品集合 { id, name, xianyu, xhs, tmall, douyin, price, charts: { exposure:[], views:[], clicks:[], sales:[], afterSales:[] } }
+    refreshTasks: [],  // 定时刷新任务 { id, title, intervalDays(1-365), done, createdAt, doneAt }
+    longtermTasks: []  // 长远任务 { id, title, durationDays(>=7), createdAt }
   };
 
   function load() {
     try {
       const t = localStorage.getItem(STORAGE_TASKS);
-      if (t) state.tasks = JSON.parse(t);
+      if (t) state.tasks = normalizeTasks(JSON.parse(t));
 
       const d = localStorage.getItem(STORAGE_DAILY);
       if (d) {
@@ -54,6 +60,12 @@
 
       const pr = localStorage.getItem(STORAGE_PRODUCTS);
       if (pr) state.products = normalizeProducts(JSON.parse(pr));
+
+      const rf = localStorage.getItem(STORAGE_REFRESH);
+      if (rf) state.refreshTasks = normalizeRefreshTasks(JSON.parse(rf));
+
+      const lt = localStorage.getItem(STORAGE_LONGTERM);
+      if (lt) state.longtermTasks = normalizeLongtermTasks(JSON.parse(lt));
     } catch (err) {
       console.warn('读取本地数据失败', err);
     }
@@ -73,6 +85,12 @@
   function saveProducts() {
     try { localStorage.setItem(STORAGE_PRODUCTS, JSON.stringify(state.products)); } catch (e) {}
   }
+  function saveRefresh() {
+    try { localStorage.setItem(STORAGE_REFRESH, JSON.stringify(state.refreshTasks)); } catch (e) {}
+  }
+  function saveLongterm() {
+    try { localStorage.setItem(STORAGE_LONGTERM, JSON.stringify(state.longtermTasks)); } catch (e) {}
+  }
 
   // 确保每个选品都具备 5 张数据图字段（兼容旧数据 / 手动构造）
   function emptyCharts() {
@@ -84,6 +102,45 @@
       const base = { id: '', name: '', xianyu: '', xhs: '', tmall: '', douyin: '', price: '' };
       Object.assign(base, p);
       base.charts = Object.assign(emptyCharts(), p.charts || {});
+      return base;
+    });
+  }
+
+  // 每周任务：补齐 doneAt；旧数据中「已完成」任务从创建时间起重新计时（幂等，符合「创建后每满7天检测」）
+  function normalizeTasks(list) {
+    if (!Array.isArray(list)) return [];
+    return list.map(function (t) {
+      const base = { id: '', title: '', weekday: 1, done: false, createdAt: 0, doneAt: 0 };
+      Object.assign(base, t);
+      base.done = !!base.done;
+      if (!base.createdAt) base.createdAt = Date.now();
+      base.weekday = Number(base.weekday) || 1;
+      if (base.weekday < 1 || base.weekday > 7) base.weekday = 1;
+      if (base.done && !base.doneAt) base.doneAt = base.createdAt;
+      return base;
+    });
+  }
+  function normalizeRefreshTasks(list) {
+    if (!Array.isArray(list)) return [];
+    return list.map(function (t) {
+      const base = { id: '', title: '', intervalDays: 3, done: false, createdAt: 0, doneAt: 0 };
+      Object.assign(base, t);
+      base.done = !!base.done;
+      if (!base.createdAt) base.createdAt = Date.now();
+      const n = Number(base.intervalDays);
+      base.intervalDays = (n >= 1 && n <= 365) ? Math.round(n) : 3;
+      if (base.done && !base.doneAt) base.doneAt = base.createdAt;
+      return base;
+    });
+  }
+  function normalizeLongtermTasks(list) {
+    if (!Array.isArray(list)) return [];
+    return list.map(function (t) {
+      const base = { id: '', title: '', durationDays: 7, createdAt: 0 };
+      Object.assign(base, t);
+      if (!base.createdAt) base.createdAt = Date.now();
+      const n = Number(base.durationDays);
+      base.durationDays = (n >= 7) ? Math.round(n) : 7;
       return base;
     });
   }
@@ -116,6 +173,8 @@
   const views = {
     weekly: $('#view-weekly'),
     daily: $('#view-daily'),
+    refresh: $('#view-refresh'),
+    longterm: $('#view-longterm'),
     todo: $('#view-todo'),
     products: $('#view-products'),
     calendar: $('#view-calendar')
@@ -133,6 +192,30 @@
   const addDailyBtn = $('#add-daily-btn');
   const dailyList = $('#daily-list');
   const dailyEmpty = $('#daily-empty');
+
+  // 定时刷新任务
+  const addRefreshInput = $('#add-refresh-input');
+  const addRefreshDays = $('#add-refresh-days');
+  const addRefreshBtn = $('#add-refresh-btn');
+  const refreshLists = $('#refresh-lists');
+  const refreshEmpty = $('#refresh-empty');
+
+  // 长远任务
+  const addLongtermInput = $('#add-longterm-input');
+  const addLongtermDays = $('#add-longterm-days');
+  const addLongtermBtn = $('#add-longterm-btn');
+  const longtermTracks = $('#longterm-tracks');
+  const longtermTrackA = $('#longterm-track-a');
+  const longtermTrackB = $('#longterm-track-b');
+  const longtermEmpty = $('#longterm-empty');
+
+  const longtermOverlay = $('#longterm-overlay');
+  const longtermEditTitle = $('#longterm-edit-title');
+  const longtermEditDays = $('#longterm-edit-days');
+  const longtermDelete = $('#longterm-delete');
+  const longtermCancel = $('#longterm-cancel');
+  const longtermSave = $('#longterm-save');
+  const longtermClose = $('#longterm-close');
 
   // 待办清单
   const addTodoInput = $('#add-todo-input');
@@ -227,18 +310,45 @@
   }
 
   // ---------- 侧边栏切换 ----------
+  let currentView = 'weekly';
   navItems.forEach(function (item) {
     item.addEventListener('click', function () {
       navItems.forEach(function (n) { n.classList.remove('active'); });
       item.classList.add('active');
       const view = item.dataset.view;
+      currentView = view;
       Object.keys(views).forEach(function (k) {
         views[k].classList.toggle('active', k === view);
       });
+      // 长远任务依赖轨道实际宽度做两列测量，切换进入时重绘一次
+      if (view === 'longterm') renderLongterm();
     });
   });
 
   // ---------- 每周任务模块 ----------
+  // 下一次「检测」时刻 = 创建时间后第 k 个整周期（每周 7 天），严格大于 doneAt
+  function nextCheckTime(createdAt, intervalDays, doneAt) {
+    const intervalMs = intervalDays * DAY_MS;
+    const since = Math.max(doneAt, createdAt);
+    const elapsed = since - createdAt;
+    const k = Math.max(1, Math.floor(elapsed / intervalMs) + 1);
+    return createdAt + k * intervalMs;
+  }
+
+  function processWeeklyResets(now) {
+    now = now || Date.now();
+    let changed = false;
+    state.tasks.forEach(function (t) {
+      if (t.done && nextCheckTime(t.createdAt, 7, t.doneAt || t.createdAt) <= now) {
+        t.done = false;
+        t.doneAt = 0;
+        changed = true;
+      }
+    });
+    if (changed) saveTasks();
+    return changed;
+  }
+
   function renderWeekly() {
     weeklyLists.innerHTML = '';
     const todayWeekday = monIndex(new Date());
@@ -305,6 +415,7 @@
     const t = state.tasks.find(function (x) { return x.id === id; });
     if (!t) return;
     t.done = true;
+    t.doneAt = Date.now();
     saveTasks();
     renderWeekly();
   }
@@ -395,6 +506,104 @@
   addDailyBtn.addEventListener('click', addDailyTask);
   addDailyInput.addEventListener('keydown', function (e) {
     if (e.key === 'Enter') addDailyTask();
+  });
+
+  // ---------- 定时刷新任务模块 ----------
+  function processRefreshResets(now) {
+    now = now || Date.now();
+    let changed = false;
+    state.refreshTasks.forEach(function (t) {
+      if (t.done && nextCheckTime(t.createdAt, t.intervalDays, t.doneAt || t.createdAt) <= now) {
+        t.done = false;
+        t.doneAt = 0;
+        changed = true;
+      }
+    });
+    if (changed) saveRefresh();
+    return changed;
+  }
+
+  function renderRefresh() {
+    refreshLists.innerHTML = '';
+
+    const groups = {};
+    state.refreshTasks.forEach(function (t) {
+      if (t.done) return;
+      (groups[t.intervalDays] = groups[t.intervalDays] || []).push(t);
+    });
+
+    const intervals = Object.keys(groups).map(Number).sort(function (a, b) { return a - b; });
+    let anyVisible = false;
+
+    intervals.forEach(function (n) {
+      const tasks = groups[n];
+      anyVisible = true;
+      tasks.sort(function (a, b) { return (a.createdAt || 0) - (b.createdAt || 0); });
+
+      const section = document.createElement('section');
+      section.className = 'day-list';
+      section.innerHTML =
+        '<header class="day-list-header">' +
+          '<h3 class="day-list-title">' + n + ' 天后刷新</h3>' +
+          '<span class="day-list-count">' + tasks.length + ' 项</span>' +
+        '</header>' +
+        '<div class="task-list">' + tasks.map(taskHTML).join('') + '</div>';
+      refreshLists.appendChild(section);
+    });
+
+    refreshEmpty.hidden = anyVisible;
+
+    $$('.task', refreshLists).forEach(function (el) {
+      const id = el.dataset.id;
+      el.querySelector('.task-check').addEventListener('click', function () {
+        animateTaskCompletion(el, function () { completeRefreshTask(id); });
+      });
+      el.querySelector('.task-delete').addEventListener('click', function () { deleteRefreshTask(id); });
+    });
+  }
+
+  function addRefreshTask() {
+    const title = addRefreshInput.value.trim();
+    const n = Math.round(Number(addRefreshDays.value));
+    if (!title) {
+      showToast('请输入任务内容');
+      addRefreshInput.focus();
+      return;
+    }
+    if (!isFinite(n) || n < 1 || n > 365) {
+      showToast('刷新天数需在 1~365 之间');
+      addRefreshDays.focus();
+      return;
+    }
+    state.refreshTasks.push({ id: uid(), title: title, intervalDays: n, done: false, createdAt: Date.now(), doneAt: 0 });
+    saveRefresh();
+    renderRefresh();
+    addRefreshInput.value = '';
+    showToast('已添加「' + n + ' 天后刷新」任务');
+  }
+
+  function completeRefreshTask(id) {
+    const t = state.refreshTasks.find(function (x) { return x.id === id; });
+    if (!t) return;
+    t.done = true;
+    t.doneAt = Date.now();
+    saveRefresh();
+    renderRefresh();
+  }
+
+  function deleteRefreshTask(id) {
+    state.refreshTasks = state.refreshTasks.filter(function (x) { return x.id !== id; });
+    saveRefresh();
+    renderRefresh();
+    showToast('任务已删除');
+  }
+
+  addRefreshBtn.addEventListener('click', addRefreshTask);
+  addRefreshInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') addRefreshTask();
+  });
+  addRefreshDays.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') addRefreshTask();
   });
 
   // ---------- 待办清单模块 ----------
@@ -1007,9 +1216,10 @@
 
   function openTaskList(mode) {
     currentTaskListMode = mode;
-    tasklistTitle.textContent = mode === 'weekly' ? '每周任务列表' : '每日任务列表';
+    tasklistTitle.textContent = mode === 'weekly' ? '每周任务列表' : (mode === 'daily' ? '每日任务列表' : '定时刷新任务列表');
     if (mode === 'weekly') renderWeeklyTaskList();
-    else renderDailyTaskList();
+    else if (mode === 'daily') renderDailyTaskList();
+    else renderRefreshTaskList();
 
     tasklistOverlay.classList.add('open');
     tasklistModal.style.transition = 'none';
@@ -1032,19 +1242,33 @@
     tasklistBody.innerHTML = '';
     const undone = state.tasks.filter(function (t) { return !t.done; });
     const done = state.tasks.filter(function (t) { return t.done; });
-    tasklistBody.appendChild(buildTaskListSection('未完成', undone, true));
-    tasklistBody.appendChild(buildTaskListSection('已完成', done, true));
+    tasklistBody.appendChild(buildTaskListSection('未完成', undone, 'weekday'));
+    tasklistBody.appendChild(buildTaskListSection('已完成', done, 'weekday'));
   }
 
   function renderDailyTaskList() {
     tasklistBody.innerHTML = '';
     const undone = state.dailyTasks.filter(function (t) { return !t.done; });
     const done = state.dailyTasks.filter(function (t) { return t.done; });
-    tasklistBody.appendChild(buildTaskListSection('未完成', undone, false));
-    tasklistBody.appendChild(buildTaskListSection('已完成', done, false));
+    tasklistBody.appendChild(buildTaskListSection('未完成', undone, null));
+    tasklistBody.appendChild(buildTaskListSection('已完成', done, null));
   }
 
-  function buildTaskListSection(title, tasks, groupByWeekday) {
+  function renderRefreshTaskList() {
+    tasklistBody.innerHTML = '';
+    const undone = state.refreshTasks.filter(function (t) { return !t.done; });
+    const done = state.refreshTasks.filter(function (t) { return t.done; });
+    tasklistBody.appendChild(buildTaskListSection('未完成', undone, 'interval'));
+    tasklistBody.appendChild(buildTaskListSection('已完成', done, 'interval'));
+  }
+
+  function renderCurrentTaskList() {
+    if (currentTaskListMode === 'weekly') renderWeeklyTaskList();
+    else if (currentTaskListMode === 'daily') renderDailyTaskList();
+    else if (currentTaskListMode === 'refresh') renderRefreshTaskList();
+  }
+
+  function buildTaskListSection(title, tasks, groupMode) {
     const sec = document.createElement('div');
     sec.className = 'tasklist-section';
 
@@ -1063,7 +1287,7 @@
 
     tasks.sort(function (a, b) { return (a.createdAt || 0) - (b.createdAt || 0); });
 
-    if (groupByWeekday) {
+    if (groupMode === 'weekday') {
       for (let w = 1; w <= 7; w++) {
         const wt = tasks.filter(function (t) { return t.weekday === w; });
         if (wt.length === 0) continue;
@@ -1076,6 +1300,19 @@
         wt.forEach(function (t) { group.appendChild(tasklistRow(t)); });
         sec.appendChild(group);
       }
+    } else if (groupMode === 'interval') {
+      const groups = {};
+      tasks.forEach(function (t) { (groups[t.intervalDays] = groups[t.intervalDays] || []).push(t); });
+      Object.keys(groups).map(Number).sort(function (a, b) { return a - b; }).forEach(function (n) {
+        const group = document.createElement('div');
+        group.className = 'tasklist-week';
+        const wh = document.createElement('div');
+        wh.className = 'tasklist-week-title';
+        wh.textContent = n + ' 天后刷新';
+        group.appendChild(wh);
+        groups[n].forEach(function (t) { group.appendChild(tasklistRow(t)); });
+        sec.appendChild(group);
+      });
     } else {
       tasks.forEach(function (t) { sec.appendChild(tasklistRow(t)); });
     }
@@ -1086,13 +1323,196 @@
   function tasklistRow(t) {
     const row = document.createElement('div');
     row.className = 'tasklist-row' + (t.done ? ' done' : '');
-    row.innerHTML = '<span class="tasklist-row-title">' + escapeHtml(t.title) + '</span>';
+    row.dataset.id = t.id;
+    row.innerHTML =
+      '<span class="tasklist-row-title">' + escapeHtml(t.title) + '</span>' +
+      '<button class="tasklist-row-delete" title="删除">✕</button>';
+    row.querySelector('.tasklist-row-delete').addEventListener('click', function () {
+      deleteTaskFromList(t.id);
+    });
     return row;
+  }
+
+  function deleteTaskFromList(id) {
+    if (currentTaskListMode === 'weekly') deleteTask(id);
+    else if (currentTaskListMode === 'daily') deleteDailyTask(id);
+    else if (currentTaskListMode === 'refresh') deleteRefreshTask(id);
+    // 删除后同时刷新弹层与对应主视图
+    renderCurrentTaskList();
+    if (currentTaskListMode === 'weekly') renderWeekly();
+    else if (currentTaskListMode === 'daily') renderDaily();
+    else if (currentTaskListMode === 'refresh') renderRefresh();
   }
 
   tasklistClose.addEventListener('click', closeTaskList);
   tasklistOverlay.addEventListener('click', function (e) {
     if (e.target === tasklistOverlay) closeTaskList();
+  });
+
+  // ---------- 长远任务模块 ----------
+  let editingLongtermId = null;
+
+  function startOfDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+
+  function remainingDays(task) {
+    const a = startOfDay(new Date(task.createdAt));
+    const b = startOfDay(new Date());
+    const days = Math.round((b.getTime() - a.getTime()) / DAY_MS);
+    return task.durationDays - days;
+  }
+
+  function heightFactor(remaining) {
+    if (remaining <= 31) return 0;
+    if (remaining >= 365) return 1.5;
+    return 1.5 * (remaining - 31) / (365 - 31);
+  }
+
+  function buildLongtermCard(task) {
+    const remaining = remainingDays(task);
+    const expired = remaining <= 0;
+    const card = document.createElement('div');
+    card.className = 'longterm-card' + (expired ? ' expired' : '');
+    card.dataset.id = task.id;
+    const label = expired ? '已到期' : '剩余 ' + remaining + ' 天';
+    card.innerHTML =
+      '<div class="longterm-title">' + escapeHtml(task.title) + '</div>' +
+      '<div class="longterm-spacer"></div>' +
+      '<div class="longterm-remaining' + (expired ? ' is-expired' : '') + '">' + label + '</div>';
+    if (isTouchDevice) {
+      // 触屏设备：手动识别「双击」打开编辑
+      let lastTap = 0;
+      card.addEventListener('click', function () {
+        const now = Date.now();
+        if (now - lastTap < 350) { lastTap = 0; openLongtermEditor(task.id); return; }
+        lastTap = now;
+      });
+    } else {
+      card.addEventListener('dblclick', function () { openLongtermEditor(task.id); });
+    }
+    return card;
+  }
+
+  function renderLongterm() {
+    longtermTrackA.innerHTML = '';
+    longtermTrackB.innerHTML = '';
+
+    if (state.longtermTasks.length === 0) {
+      longtermTracks.style.display = 'none';
+      longtermEmpty.hidden = false;
+      return;
+    }
+    longtermTracks.style.display = '';
+    longtermEmpty.hidden = true;
+
+    const tasks = state.longtermTasks.slice().sort(function (a, b) { return (a.createdAt || 0) - (b.createdAt || 0); });
+
+    // 测量容器：与单条轨道同宽，用于计算卡片「内容自然高度」
+    const measure = document.createElement('div');
+    measure.className = 'longterm-measure';
+    measure.style.width = (longtermTrackA.clientWidth || 400) + 'px';
+    document.body.appendChild(measure);
+
+    const GAP = 18;
+    let hA = 0, hB = 0;
+
+    tasks.forEach(function (task) {
+      const card = buildLongtermCard(task);
+      measure.appendChild(card);
+      const natural = card.offsetHeight;
+      measure.removeChild(card);
+      const total = Math.max(natural, Math.round(natural * (1 + heightFactor(remainingDays(task)))));
+      card.style.height = total + 'px';
+      if (hA <= hB) {
+        longtermTrackA.appendChild(card);
+        hA += total + GAP;
+      } else {
+        longtermTrackB.appendChild(card);
+        hB += total + GAP;
+      }
+    });
+
+    measure.remove();
+  }
+
+  function addLongtermTask() {
+    const title = addLongtermInput.value.trim();
+    const n = Math.round(Number(addLongtermDays.value));
+    if (!title) {
+      showToast('请输入任务内容');
+      addLongtermInput.focus();
+      return;
+    }
+    if (!isFinite(n) || n < 7 || n > 3650) {
+      showToast('持续时间需在 7~3650 天之间');
+      addLongtermDays.focus();
+      return;
+    }
+    state.longtermTasks.push({ id: uid(), title: title, durationDays: n, createdAt: Date.now() });
+    saveLongterm();
+    renderLongterm();
+    addLongtermInput.value = '';
+    addLongtermDays.value = '';
+    showToast('已添加长远任务');
+  }
+
+  function openLongtermEditor(id) {
+    const t = state.longtermTasks.find(function (x) { return x.id === id; });
+    if (!t) return;
+    editingLongtermId = id;
+    longtermEditTitle.value = t.title;
+    longtermEditDays.value = t.durationDays;
+    longtermOverlay.classList.add('open');
+    setTimeout(function () { longtermEditTitle.focus(); }, 60);
+  }
+
+  function closeLongtermEditor() {
+    longtermOverlay.classList.remove('open');
+    editingLongtermId = null;
+  }
+
+  function saveLongtermEdit() {
+    const t = state.longtermTasks.find(function (x) { return x.id === editingLongtermId; });
+    if (!t) return;
+    const title = longtermEditTitle.value.trim();
+    const n = Math.round(Number(longtermEditDays.value));
+    if (!title) { showToast('请输入任务内容'); return; }
+    if (!isFinite(n) || n < 7 || n > 3650) { showToast('持续时间需在 7~3650 天之间'); return; }
+    t.title = title;
+    t.durationDays = n;
+    saveLongterm();
+    closeLongtermEditor();
+    renderLongterm();
+  }
+
+  function deleteLongtermTask() {
+    if (!editingLongtermId) return;
+    state.longtermTasks = state.longtermTasks.filter(function (x) { return x.id !== editingLongtermId; });
+    saveLongterm();
+    closeLongtermEditor();
+    renderLongterm();
+    showToast('任务已删除');
+  }
+
+  addLongtermBtn.addEventListener('click', addLongtermTask);
+  addLongtermInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') addLongtermTask();
+  });
+  addLongtermDays.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') addLongtermTask();
+  });
+
+  longtermSave.addEventListener('click', saveLongtermEdit);
+  longtermCancel.addEventListener('click', closeLongtermEditor);
+  longtermClose.addEventListener('click', closeLongtermEditor);
+  longtermDelete.addEventListener('click', deleteLongtermTask);
+  longtermOverlay.addEventListener('click', function (e) {
+    if (e.target === longtermOverlay) closeLongtermEditor();
+  });
+  longtermEditTitle.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') saveLongtermEdit();
+  });
+  longtermEditDays.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') saveLongtermEdit();
   });
 
   // ---------- 日历模块 ----------
@@ -1461,24 +1881,45 @@
     if (e.key !== 'Escape') return;
     if (iconPopover.classList.contains('open')) { closeIconPicker(); return; }
     if (dayOverlay.classList.contains('open')) { closeEditor(false); return; }
+    if (longtermOverlay.classList.contains('open')) { closeLongtermEditor(); return; }
     if (tasklistOverlay.classList.contains('open')) { closeTaskList(); }
   });
 
-  // ---------- 跨天自动重置每日任务 ----------
+  // ---------- 跨天自动处理 ----------
+  let lastTickDate = toKey(new Date());
   setInterval(function () {
     const today = toKey(new Date());
+    const dayChanged = today !== lastTickDate;
+    if (dayChanged) lastTickDate = today;
+
     if (state.dailyDate !== today) {
       ensureDailyReset();
       renderDaily();
       if (currentTaskListMode === 'daily') renderDailyTaskList();
     }
+
+    const weeklyChanged = processWeeklyResets();
+    const refreshChanged = processRefreshResets();
+    if (weeklyChanged) {
+      renderWeekly();
+      if (currentTaskListMode === 'weekly') renderWeeklyTaskList();
+    }
+    if (refreshChanged) {
+      renderRefresh();
+      if (currentTaskListMode === 'refresh') renderRefreshTaskList();
+    }
+
+    if (dayChanged && currentView === 'longterm') renderLongterm();
   }, 30000);
 
   // ---------- 初始化 ----------
   load();
   ensureDailyReset();
+  processWeeklyResets();
+  processRefreshResets();
   renderWeekly();
   renderDaily();
+  renderRefresh();
   renderTodo();
   renderProducts();
   renderCalendar();

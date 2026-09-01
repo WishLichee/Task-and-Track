@@ -41,6 +41,20 @@
           </svg>
           <span>每日任务</span>
         </button>
+        <button class="nav-item" data-view="refresh">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+            <path d="M21 3v6h-6" />
+          </svg>
+          <span>定时刷新</span>
+        </button>
+        <button class="nav-item" data-view="longterm">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+            <line x1="4" y1="22" x2="4" y2="15" />
+          </svg>
+          <span>长远任务</span>
+        </button>
         <button class="nav-item" data-view="todo">
           <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="8" y="2" width="8" height="4" rx="1" />
@@ -150,6 +164,76 @@
               <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
             </svg>
             <span>暂无任务</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 定时刷新任务视图 -->
+      <section class="view" id="view-refresh">
+        <div class="weekly-panel">
+          <header class="page-header">
+            <div>
+              <h1 class="page-title">定时刷新任务</h1>
+              <p class="page-subtitle">定义任务在 N 天后自动重新出现，同一刷新天数的任务归入同一列表。</p>
+            </div>
+            <button class="btn-tasklist" data-list="refresh">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
+                <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
+              </svg>
+              查看任务列表
+            </button>
+          </header>
+
+          <div class="add-task-card">
+            <input id="add-refresh-input" class="add-task-input" type="text" placeholder="输入任务内容…" maxlength="80" />
+            <div class="interval-field">
+              <input id="add-refresh-days" class="interval-input" type="number" min="1" max="365" step="1" value="3" />
+              <span class="interval-suffix">天后刷新</span>
+            </div>
+            <button id="add-refresh-btn" class="btn-primary">添加任务</button>
+          </div>
+
+          <div id="refresh-lists" class="weekly-lists"></div>
+          <div id="refresh-empty" class="big-empty" hidden>
+            <svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+              <path d="M21 3v6h-6" />
+            </svg>
+            <span>暂无任务</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 长远任务视图 -->
+      <section class="view" id="view-longterm">
+        <div class="longterm-panel">
+          <header class="page-header">
+            <div>
+              <h1 class="page-title">长远任务</h1>
+              <p class="page-subtitle">持续时间 7 天起的长期目标，剩余时间越多卡片越高；双击卡片可修改或删除。</p>
+            </div>
+          </header>
+
+          <div class="add-task-card">
+            <input id="add-longterm-input" class="add-task-input" type="text" placeholder="输入长远任务内容…" maxlength="80" />
+            <div class="interval-field">
+              <input id="add-longterm-days" class="interval-input" type="number" min="7" max="3650" step="1" />
+              <span class="interval-suffix">天</span>
+            </div>
+            <button id="add-longterm-btn" class="btn-primary">添加任务</button>
+          </div>
+
+          <div id="longterm-tracks" class="longterm-tracks">
+            <div class="longterm-track" id="longterm-track-a"></div>
+            <div class="longterm-track" id="longterm-track-b"></div>
+          </div>
+          <div id="longterm-empty" class="big-empty" hidden>
+            <svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+              <line x1="4" y1="22" x2="4" y2="15" />
+            </svg>
+            <span>暂无长远任务</span>
           </div>
         </div>
       </section>
@@ -333,6 +417,34 @@
 
   <!-- 数据图悬停提示 -->
   <div id="chart-tooltip" class="chart-tooltip"></div>
+
+  <!-- 长远任务编辑弹层 -->
+  <div id="longterm-overlay" class="overlay longterm-overlay">
+    <div class="longterm-modal">
+      <div class="day-modal-header">
+        <div class="day-modal-title">编辑长远任务</div>
+        <button id="longterm-close" class="modal-close" title="关闭">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+        </button>
+      </div>
+      <div class="longterm-body">
+        <label class="point-field">
+          <span class="point-label">任务内容</span>
+          <input id="longterm-edit-title" type="text" maxlength="80" class="point-input" />
+        </label>
+        <label class="point-field">
+          <span class="point-label">持续时间（天，最小 7）</span>
+          <input id="longterm-edit-days" type="number" min="7" max="3650" step="1" class="point-input" />
+        </label>
+      </div>
+      <div class="point-footer">
+        <button id="longterm-delete" class="btn-danger">删除</button>
+        <span class="point-footer-spacer"></span>
+        <button id="longterm-cancel" class="btn-ghost">取消</button>
+        <button id="longterm-save" class="btn-primary">保存</button>
+      </div>
+    </div>
+  </div>
 
   <!-- 提示 -->
   <div id="toast" class="toast"></div>
